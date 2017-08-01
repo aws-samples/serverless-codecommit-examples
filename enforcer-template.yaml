@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  SourceRepositoryName:
+    Type: String
+    Description: Enter the CodeCommit repository name to source for replication.
+  MessageRegex:
+    Type: String
+    Description: Enter the message policy regular expression
+  MainBranchName:
+    Type: String
+    Description: Enter the CodeCommit repository's main branch name
+  NotificationEmailAddress:
+    Type: String
+    Description: Enter the email to notify for policy violations.
+
+Resources:
+  SnsTopic:
+    Type: 'AWS::SNS::Topic'
+    Properties:
+      Subscription:
+        - Protocol: email
+          Endpoint: !Ref NotificationEmailAddress
+
+  Enforcer:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: cwecc.PolicyEnforcerHandler
+      Runtime: java8
+      CodeUri: ./build/distributions/
+      Description: CodeCommit Policy Enforcer
+      MemorySize: 1028
+      Timeout: 300
+      Environment:
+        Variables:
+          MESSAGE_REGEX: !Ref MessageRegex
+          MAIN_BRANCH_NAME: !Ref MainBranchName
+          SNS_TOPIC_ARN: !Ref SnsTopic
+      Events:
+        ReferenceCreatedOrUpdated:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+                - aws.codecommit
+              resources:
+                - !Sub 'arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${SourceRepositoryName}'
+              detail:
+                event:
+                  - referenceCreated
+                  - referenceUpdated
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Resource: !Sub 'arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${SourceRepositoryName}'
+              Action:
+                - 'codecommit:GetRepository'
+                - 'codecommit:GitPull'
+            - Effect: Allow
+              Resource: !Ref SnsTopic
+              Action:
+                - 'sns:publish'

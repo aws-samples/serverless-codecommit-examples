@@ -1,0 +1,49 @@
+AWSTemplateFormatVersion: 2010-09-09
+Transform: AWS::Serverless-2016-10-31
+
+Parameters:
+  SourceRepositoryName:
+    Type: String
+    Description: Enter the CodeCommit repository name to source for replication.
+  TargetS3Bucket:
+    Type: String
+    Description: Enter the S3 Bucket to target for archive.
+
+Resources:
+  Archiver:
+    Type: 'AWS::Serverless::Function'
+    Properties:
+      Handler: cwecc.ArchiveRepositoryHandler
+      Runtime: java8
+      CodeUri: ./build/distributions/
+      Description: CodeCommit Archive to S3
+      MemorySize: 1028
+      Timeout: 300
+      Environment:
+        Variables:
+          TARGET_S3_BUCKET: !Ref TargetS3Bucket
+      Events:
+        ReferenceCreatedOrUpdated:
+          Type: CloudWatchEvent
+          Properties:
+            Pattern:
+              source:
+                - aws.codecommit
+              resources:
+                - !Sub 'arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${SourceRepositoryName}'
+              detail:
+                event:
+                  - referenceCreated
+                  - referenceUpdated
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Resource: !Sub 'arn:aws:codecommit:${AWS::Region}:${AWS::AccountId}:${SourceRepositoryName}'
+              Action:
+                - 'codecommit:GetRepository'
+                - 'codecommit:GitPull'
+            - Effect: Allow
+              Resource: !Sub 'arn:aws:s3:::${TargetS3Bucket}/*'
+              Action:
+                - 's3:PutObject'
