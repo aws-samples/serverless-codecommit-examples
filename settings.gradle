@@ -15,4 +15,4 @@ include 'api'
 include 'services:webservice'
 */
 
-rootProject.name = 'cc-cwe'
+rootProject.name = 'serverless-codecommit-examples'
